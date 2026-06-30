@@ -1181,7 +1181,9 @@ function Dashboard({
   favs,
   go,
   loadFav,
-  seedDemo
+  seedDemo,
+  goal,
+  setGoal
 }) {
   const cov = useMemo(() => coverage(sessions), [sessions]);
   const wc = weekCount(sessions),
@@ -1191,6 +1193,11 @@ function Dashboard({
   const sig = useMemo(() => strengthSignals(sessions), [sessions]);
   const sugId = suggestFav(favs, cov);
   const empty = sessions.length === 0;
+  const boardDone = cov.filter(c => c.count > 0).length,
+    allTen = boardDone === 10;
+  const pct = Math.min(wc / Math.max(goal, 1), 1),
+    reached = wc >= goal;
+  const RC = 2 * Math.PI * 34;
   return /*#__PURE__*/React.createElement("div", {
     className: "app"
   }, /*#__PURE__*/React.createElement("h1", {
@@ -1219,25 +1226,110 @@ function Dashboard({
     className: "btn btn-sm",
     onClick: seedDemo
   }, "ลองใส่ข้อมูลตัวอย่าง"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "card",
     style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginBottom: 18
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      marginBottom: 14
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "metric"
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "92",
+    height: "92",
+    viewBox: "0 0 92 92",
+    style: {
+      flex: 'none'
+    },
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "46",
+    cy: "46",
+    r: "34",
+    fill: "none",
+    stroke: "var(--line)",
+    strokeWidth: "9"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "46",
+    cy: "46",
+    r: "34",
+    fill: "none",
+    stroke: reached ? 'var(--ok)' : 'var(--accent)',
+    strokeWidth: "9",
+    strokeLinecap: "round",
+    strokeDasharray: RC,
+    strokeDashoffset: RC * (1 - pct),
+    transform: "rotate(-90 46 46)"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: "46",
+    y: "44",
+    textAnchor: "middle",
+    fontSize: "24",
+    fontWeight: "700",
+    fill: "var(--ink)",
+    fontFamily: "Space Grotesk, sans-serif"
+  }, wc), /*#__PURE__*/React.createElement("text", {
+    x: "46",
+    y: "62",
+    textAnchor: "middle",
+    fontSize: "13",
+    fill: "var(--muted)",
+    fontFamily: "Space Grotesk, sans-serif"
+  }, "/ ", goal)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
   }, /*#__PURE__*/React.createElement("p", {
-    className: "label"
-  }, "เทรน 7 วันล่าสุด"), /*#__PURE__*/React.createElement("p", {
-    className: "val num"
-  }, wc, " ", /*#__PURE__*/React.createElement("small", null, "ครั้ง"))), /*#__PURE__*/React.createElement("div", {
-    className: "metric"
-  }, /*#__PURE__*/React.createElement("p", {
-    className: "label"
-  }, "บันทึกทั้งหมด"), /*#__PURE__*/React.createElement("p", {
-    className: "val num"
-  }, total, " ", /*#__PURE__*/React.createElement("small", null, "ครั้ง")))), /*#__PURE__*/React.createElement("div", {
+    className: "label",
+    style: {
+      fontSize: 13
+    }
+  }, "เทรนสัปดาห์นี้"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: '2px 0 9px',
+      fontSize: 15,
+      fontWeight: 500,
+      color: reached ? 'var(--ok)' : 'var(--ink)'
+    }
+  }, reached ? 'ถึงเป้าแล้ว เก่งมาก!' : wc + ' จาก ' + goal + ' ครั้ง'), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 7
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "small muted"
+  }, "เป้า"), /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    style: {
+      padding: '3px 12px',
+      fontSize: 16,
+      lineHeight: 1
+    },
+    onClick: () => setGoal(Math.max(1, goal - 1)),
+    "aria-label": "ลดเป้า"
+  }, "−"), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      fontWeight: 600,
+      minWidth: 14,
+      textAlign: 'center'
+    }
+  }, goal), /*#__PURE__*/React.createElement("button", {
+    className: "btn",
+    style: {
+      padding: '3px 12px',
+      fontSize: 16,
+      lineHeight: 1
+    },
+    onClick: () => setGoal(Math.min(7, goal + 1)),
+    "aria-label": "เพิ่มเป้า"
+  }, "+"), /*#__PURE__*/React.createElement("span", {
+    className: "small muted",
+    style: {
+      marginLeft: 4
+    }
+  }, "· ทั้งหมด ", total)))), /*#__PURE__*/React.createElement("div", {
     className: "row",
     style: {
       margin: '0 2px 8px'
@@ -1251,7 +1343,14 @@ function Dashboard({
     style: {
       fontWeight: 400
     }
-  }, "· 7 วันล่าสุด"))), /*#__PURE__*/React.createElement("div", {
+  }, "· 7 วันล่าสุด")), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      fontSize: 14,
+      fontWeight: 600,
+      color: allTen ? 'var(--ok)' : 'var(--muted)'
+    }
+  }, boardDone, "/10")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 13,
@@ -1286,7 +1385,26 @@ function Dashboard({
     className: 'cov ' + c.status
   }, /*#__PURE__*/React.createElement("span", null, c.th), /*#__PURE__*/React.createElement("b", {
     className: "num"
-  }, c.count, "x")))), miss.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, c.count, "x")))), allTen && /*#__PURE__*/React.createElement("div", {
+    className: "banner ok",
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      color: 'var(--ok-ink)',
+      marginBottom: 3,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement(Ic, {
+    n: "star",
+    s: 15
+  }), " Full Body Week!"), /*#__PURE__*/React.createElement("div", {
+    className: "muted"
+  }, "เทรนครบทั้ง 10 กลุ่มใน 7 วัน — สมดุลเต็มตัว ทำต่อเนื่องแบบนี้เลย")), miss.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "banner miss",
     style: {
       marginBottom: 12
@@ -1915,6 +2033,10 @@ function App() {
   const [favs, setFavs] = useState(() => DB.get('genos.favs', DB.get('genos.init', false) ? [] : DEFAULT_FAVS));
   const [draft, setDraft] = useState(() => DB.get('genos.draft', TODAY_DRAFT()));
   const [custom, setCustom] = useState(() => DB.get('genos.custom', []));
+  const [goal, setGoal] = useState(() => DB.get('genos.goal', 4));
+  useEffect(() => {
+    DB.set('genos.goal', goal);
+  }, [goal]);
   useEffect(() => {
     DB.set('genos.sessions', sessions);
   }, [sessions]);
@@ -2018,7 +2140,9 @@ function App() {
     favs: favs,
     go: setTab,
     loadFav: loadFav,
-    seedDemo: seedDemo
+    seedDemo: seedDemo,
+    goal: goal,
+    setGoal: setGoal
   }), tab === 'log' && /*#__PURE__*/React.createElement(Log, {
     sessions: sessions,
     draft: draft,
