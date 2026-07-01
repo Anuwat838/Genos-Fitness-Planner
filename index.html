@@ -98,6 +98,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 </head>
 <body>
 <div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>/**
  * @license React
  * react.production.min.js
@@ -401,7 +402,8 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
 const {
   useState,
   useEffect,
-  useMemo
+  useMemo,
+  useRef
 } = React;
 const EXERCISES = [{
   "id": "0025",
@@ -700,6 +702,71 @@ try {
     EXBYID[e.id] = e;
   });
 } catch (e) {}
+
+// ---------- cloud sync (Supabase) ----------
+const SUPA_URL = 'https://wmypsryildrbllnyexxu.supabase.co';
+const SUPA_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndteXBzcnlpbGRyYmxsbnlleHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjYxMTMsImV4cCI6MjA5ODQ0MjExM30.kT6cn0ffYSxKctEoSwubBfdq3q27QsdM0Hdd8OUVbys';
+let supa = null;
+try {
+  if (window.supabase) {
+    supa = window.supabase.createClient(SUPA_URL, SUPA_ANON_KEY);
+  }
+} catch (e) {}
+function mapSessionIn(row) {
+  return {
+    id: 's_' + row.id,
+    date: row.date,
+    items: row.items
+  };
+}
+function mapFavIn(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    exerciseIds: row.exercise_ids
+  };
+}
+function mapCustomIn(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    primary: row.primary_muscle,
+    secondary: row.secondary_muscles || [],
+    custom: true,
+    equipment: 'custom',
+    loc: ''
+  };
+}
+async function supaPullAll() {
+  const [s, f, c] = await Promise.all([supa.from('sessions').select('*').order('date', {
+    ascending: true
+  }), supa.from('favorites').select('*'), supa.from('custom_exercises').select('*')]);
+  return {
+    sessions: (s.data || []).map(mapSessionIn),
+    favs: (f.data || []).map(mapFavIn),
+    custom: (c.data || []).map(mapCustomIn)
+  };
+}
+async function supaPushAll(uid, sessions, favs, custom) {
+  if (sessions.length) await supa.from('sessions').insert(sessions.map(s => ({
+    user_id: uid,
+    date: s.date,
+    items: s.items
+  })));
+  if (favs.length) await supa.from('favorites').upsert(favs.map(f => ({
+    id: f.id,
+    user_id: uid,
+    name: f.name,
+    exercise_ids: f.exerciseIds
+  })));
+  if (custom.length) await supa.from('custom_exercises').upsert(custom.map(e => ({
+    id: e.id,
+    user_id: uid,
+    name: e.name,
+    primary_muscle: e.primary,
+    secondary_muscles: e.secondary || []
+  })));
+}
 const EQTH = {
   barbell: 'บาร์เบล',
   dumbbell: 'ดัมเบล',
@@ -950,6 +1017,16 @@ const ic = {
     rx: "2"
   }), /*#__PURE__*/React.createElement("path", {
     d: "M4 16V4h12"
+  })),
+  login: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
+    d: "M15 4h4v16h-4"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M11 8l4 4-4 4"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M15 12H3"
+  })),
+  cloud: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
+    d: "M7 18a4 4 0 010-8 5 5 0 019.5-1.5A4 4 0 0118 18H7z"
   }))
 };
 const Ic = ({
@@ -1175,7 +1252,104 @@ function Picker({
   }, "เสร็จ")));
 }
 
-// ---------- Dashboard ----------
+// ---------- Account / sync sheet ----------
+function AccountSheet({
+  user,
+  syncing,
+  onClose,
+  onSignIn,
+  onSignOut
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "overlay",
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sheet",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sheet-head"
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 18
+    }
+  }, "บัญชี & ซิงค์"), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: onClose,
+    "aria-label": "ปิด"
+  }, /*#__PURE__*/React.createElement(Ic, {
+    n: "x"
+  }))), !supa && /*#__PURE__*/React.createElement("p", {
+    className: "small muted"
+  }, "ระบบซิงค์เชื่อมต่อไม่ได้ตอนนี้ (อาจไม่มีเน็ต) — ข้อมูลยังบันทึกในเครื่องตามปกติ"), supa && !user && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "small muted",
+    style: {
+      marginBottom: 14,
+      lineHeight: 1.6
+    }
+  }, "เชื่อมบัญชี Google เพื่อสำรองข้อมูลขึ้นคลาวด์ และใช้ข้ามเครื่องได้ — ไม่เชื่อมก็ใช้แอปได้ตามปกติ ข้อมูลจะอยู่ในเครื่องนี้เท่านั้น"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-block",
+    onClick: onSignIn
+  }, /*#__PURE__*/React.createElement(Ic, {
+    n: "login",
+    s: 17
+  }), " เข้าสู่ระบบด้วย Google")), supa && user && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      marginBottom: 14,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12
+    }
+  }, user.user_metadata && user.user_metadata.avatar_url ? /*#__PURE__*/React.createElement("img", {
+    src: user.user_metadata.avatar_url,
+    alt: "",
+    style: {
+      width: 44,
+      height: 44,
+      borderRadius: '50%',
+      flex: 'none'
+    }
+  }) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 44,
+      height: 44,
+      borderRadius: '50%',
+      background: 'var(--accent-soft)',
+      color: 'var(--accent)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 600,
+      flex: 'none'
+    }
+  }, (user.email || '?')[0].toUpperCase()), /*#__PURE__*/React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 500,
+      fontSize: 14,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    }
+  }, user.user_metadata && user.user_metadata.full_name || user.email), /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 5,
+      marginTop: 2
+    }
+  }, /*#__PURE__*/React.createElement(Ic, {
+    n: "cloud",
+    s: 13
+  }), syncing ? 'กำลังซิงค์...' : 'ซิงค์แล้ว'))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-block",
+    onClick: onSignOut
+  }, "ออกจากระบบ"))));
+}
 function Dashboard({
   sessions,
   favs,
@@ -1183,7 +1357,9 @@ function Dashboard({
   loadFav,
   seedDemo,
   goal,
-  setGoal
+  setGoal,
+  user,
+  onOpenAccount
 }) {
   const cov = useMemo(() => coverage(sessions), [sessions]);
   const wc = weekCount(sessions),
@@ -1200,9 +1376,25 @@ function Dashboard({
   const RC = 2 * Math.PI * 34;
   return /*#__PURE__*/React.createElement("div", {
     className: "app"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row",
+    style: {
+      alignItems: 'flex-start'
+    }
   }, /*#__PURE__*/React.createElement("h1", {
     className: "screen-title"
-  }, "ภาพรวม 7 วันล่าสุด"), /*#__PURE__*/React.createElement("p", {
+  }, "ภาพรวม 7 วันล่าสุด"), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    style: {
+      marginTop: 2,
+      color: user ? 'var(--ok)' : 'var(--muted)'
+    },
+    onClick: onOpenAccount,
+    "aria-label": "บัญชีและซิงค์"
+  }, /*#__PURE__*/React.createElement(Ic, {
+    n: user ? 'cloud' : 'login',
+    s: 21
+  }))), /*#__PURE__*/React.createElement("p", {
     className: "sub"
   }, new Date().toLocaleDateString('th-TH', {
     weekday: 'long',
@@ -1722,20 +1914,29 @@ function Favorites({
   cov,
   custom,
   addCustom,
-  deleteCustom
+  deleteCustom,
+  user
 }) {
   const [editing, setEditing] = useState(null); // {id?,name,exerciseIds}
   const sugId = suggestFav(favs, cov);
   function save() {
     if (!editing.name.trim() || !editing.exerciseIds.length) return;
-    if (editing.id) setFavs(favs.map(f => f.id === editing.id ? editing : f));else setFavs([...favs, {
+    const f = editing.id ? editing : {
       ...editing,
       id: 'fav_' + Date.now()
-    }]);
+    };
+    if (editing.id) setFavs(favs.map(x => x.id === editing.id ? f : x));else setFavs([...favs, f]);
+    if (user && supa) supa.from('favorites').upsert({
+      id: f.id,
+      user_id: user.id,
+      name: f.name,
+      exercise_ids: f.exerciseIds
+    }).then(() => {}).catch(() => {});
     setEditing(null);
   }
   function del(id) {
     setFavs(favs.filter(f => f.id !== id));
+    if (user && supa) supa.from('favorites').delete().eq('id', id).then(() => {}).catch(() => {});
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "app"
@@ -2034,6 +2235,60 @@ function App() {
   const [draft, setDraft] = useState(() => DB.get('genos.draft', TODAY_DRAFT()));
   const [custom, setCustom] = useState(() => DB.get('genos.custom', []));
   const [goal, setGoal] = useState(() => DB.get('genos.goal', 4));
+  const [user, setUser] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const syncedRef = useRef(false);
+  useEffect(() => {
+    if (!supa) return;
+    supa.auth.getSession().then(({
+      data
+    }) => setUser(data.session ? data.session.user : null)).catch(() => {});
+    const {
+      data: sub
+    } = supa.auth.onAuthStateChange((event, session) => setUser(session ? session.user : null));
+    return () => {
+      try {
+        sub.subscription.unsubscribe();
+      } catch (e) {}
+    };
+  }, []);
+  useEffect(() => {
+    if (!user || !supa || syncedRef.current) return;
+    syncedRef.current = true;
+    setSyncing(true);
+    (async () => {
+      try {
+        const {
+          count
+        } = await supa.from('sessions').select('id', {
+          count: 'exact',
+          head: true
+        });
+        if (!count) {
+          await supaPushAll(user.id, sessions, favs, custom);
+        } else {
+          const remote = await supaPullAll();
+          setSessions(remote.sessions);
+          if (remote.favs.length) setFavs(remote.favs);
+          setCustom(remote.custom);
+        }
+      } catch (e) {}
+      setSyncing(false);
+    })();
+  }, [user]);
+  function signIn() {
+    if (supa) supa.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.href
+      }
+    });
+  }
+  function signOut() {
+    if (supa) supa.auth.signOut();
+    syncedRef.current = false;
+  }
   useEffect(() => {
     DB.set('genos.goal', goal);
   }, [goal]);
@@ -2056,9 +2311,17 @@ function App() {
   function addCustom(ex) {
     EXBYID[ex.id] = ex;
     setCustom([...custom, ex]);
+    if (user && supa) supa.from('custom_exercises').upsert({
+      id: ex.id,
+      user_id: user.id,
+      name: ex.name,
+      primary_muscle: ex.primary,
+      secondary_muscles: ex.secondary || []
+    }).then(() => {}).catch(() => {});
   }
   function deleteCustom(id) {
     setCustom(custom.filter(e => e.id !== id));
+    if (user && supa) supa.from('custom_exercises').delete().eq('id', id).then(() => {}).catch(() => {});
   }
   const cov = useMemo(() => coverage(sessions), [sessions]);
   function saveSession() {
@@ -2070,11 +2333,17 @@ function App() {
       setDraft(TODAY_DRAFT());
       return;
     }
-    setSessions([...sessions, {
+    const newSession = {
       id: 's_' + Date.now(),
       date: new Date().toISOString(),
       items
-    }]);
+    };
+    setSessions([...sessions, newSession]);
+    if (user && supa) supa.from('sessions').insert({
+      user_id: user.id,
+      date: newSession.date,
+      items: newSession.items
+    }).then(() => {}).catch(() => {});
     setDraft(TODAY_DRAFT());
     setTab('home');
   }
@@ -2101,11 +2370,18 @@ function App() {
     if (!exIds.length) return;
     const name = prompt('ตั้งชื่อชุดนี้:', 'ชุดของฉัน');
     if (!name) return;
-    setFavs([...favs, {
+    const nf = {
       id: 'fav_' + Date.now(),
       name: name.trim(),
       exerciseIds: exIds
-    }]);
+    };
+    setFavs([...favs, nf]);
+    if (user && supa) supa.from('favorites').upsert({
+      id: nf.id,
+      user_id: user.id,
+      name: nf.name,
+      exercise_ids: nf.exerciseIds
+    }).then(() => {}).catch(() => {});
     setTab('fav');
   }
   function seedDemo() {
@@ -2142,7 +2418,9 @@ function App() {
     loadFav: loadFav,
     seedDemo: seedDemo,
     goal: goal,
-    setGoal: setGoal
+    setGoal: setGoal,
+    user: user,
+    onOpenAccount: () => setShowAccount(true)
   }), tab === 'log' && /*#__PURE__*/React.createElement(Log, {
     sessions: sessions,
     draft: draft,
@@ -2160,9 +2438,16 @@ function App() {
     cov: cov,
     custom: custom,
     addCustom: addCustom,
-    deleteCustom: deleteCustom
+    deleteCustom: deleteCustom,
+    user: user
   }), tab === 'hist' && /*#__PURE__*/React.createElement(History, {
     sessions: sessions
+  }), showAccount && /*#__PURE__*/React.createElement(AccountSheet, {
+    user: user,
+    syncing: syncing,
+    onClose: () => setShowAccount(false),
+    onSignIn: signIn,
+    onSignOut: signOut
   }), /*#__PURE__*/React.createElement("div", {
     className: "nav"
   }, /*#__PURE__*/React.createElement("button", {
