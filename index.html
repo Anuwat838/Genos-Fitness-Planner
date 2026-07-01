@@ -704,7 +704,7 @@ try {
 } catch (e) {}
 
 // ---------- build version (สำหรับเช็คว่าเครื่องกำลังใช้ไฟล์ล่าสุดจริงไหม) ----------
-const BUILD_ID = '2026-07-01 09:43';
+const BUILD_ID = '2026-07-01 11:43';
 
 // ---------- cloud sync (Supabase) ----------
 const SUPA_URL = 'https://wmypsryildrbllnyexxu.supabase.co';
@@ -749,16 +749,25 @@ async function rawProbe() {
       } = await supa.auth.getSession();
       if (sd && sd.session) token = sd.session.access_token;
     } catch (e) {}
-    const res = await fetch(SUPA_URL + '/rest/v1/sessions?select=id&limit=1', {
-      headers: {
-        apikey: SUPA_ANON_KEY,
-        Authorization: 'Bearer ' + token
+    const tables = ['sessions', 'favorites', 'custom_exercises'];
+    const results = [];
+    for (const t of tables) {
+      try {
+        const res = await fetch(SUPA_URL + '/rest/v1/' + t + '?select=id&limit=3', {
+          headers: {
+            apikey: SUPA_ANON_KEY,
+            Authorization: 'Bearer ' + token
+          }
+        });
+        const text = await res.text();
+        results.push(t + ': HTTP ' + res.status + ' ' + (text ? text.slice(0, 150) : '(ว่าง)'));
+      } catch (e) {
+        results.push(t + ': เชื่อมต่อไม่ได้ - ' + (e && e.message ? e.message : String(e)));
       }
-    });
-    const text = await res.text();
-    return 'HTTP ' + res.status + ' — ' + (text ? text.slice(0, 180) : '(ไม่มีเนื้อหาตอบกลับ)');
+    }
+    return results.join('  |  ');
   } catch (e) {
-    return 'เชื่อมต่อ Supabase โดยตรงไม่ได้ (น่าจะ CORS/เครือข่าย): ' + (e && e.message ? e.message : String(e));
+    return 'ตรวจสอบไม่ได้: ' + (e && e.message ? e.message : String(e));
   }
 }
 function errText(err) {
@@ -2347,13 +2356,26 @@ function App() {
         await supaPushAll(user.id, pendingSessions, pendingFavs, pendingCustom);
       }
       const remote = await supaPullAll();
-      setSessions(remote.sessions);
-      setFavs(remote.favs.length ? remote.favs : favs);
-      setCustom(remote.custom);
-      const cnames = remote.custom.map(c => c.name).join(', ') || '(ไม่มี)';
+      const mergeById = (loc, rem, key) => {
+        const m = new Map();
+        loc.forEach(x => m.set(key(x), x));
+        rem.forEach(x => m.set(key(x), x));
+        return [...m.values()];
+      };
+      const mSessions = mergeById(sessions, remote.sessions, x => x.date);
+      const mFavs = mergeById(favs, remote.favs, x => x.id);
+      const mCustom = mergeById(custom, remote.custom, x => x.id);
+      setSessions(mSessions);
+      setFavs(mFavs);
+      setCustom(mCustom);
+      mCustom.forEach(e => {
+        EXBYID[e.id] = e;
+      });
+      const cnames = mCustom.map(c => c.name).join(', ') || '(ไม่มี)';
+      const probe = await rawProbe();
       setSyncMsg({
         ok: true,
-        text: 'ซิงค์สำเร็จ — workout ' + remote.sessions.length + ', favorite ' + remote.favs.length + ', ท่าที่สร้างเอง ' + remote.custom.length + ' (' + cnames + ')'
+        text: 'ซิงค์เสร็จ — จากคลาวด์ได้: workout ' + remote.sessions.length + ', fav ' + remote.favs.length + ', ท่า ' + remote.custom.length + ' | รวมแล้วมีท่าที่สร้างเอง ' + mCustom.length + ' (' + cnames + ') — [raw] ' + probe
       });
     } catch (e) {
       const probe = await rawProbe();
