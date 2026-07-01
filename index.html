@@ -737,6 +737,27 @@ function mapCustomIn(row) {
     loc: ''
   };
 }
+async function rawProbe() {
+  try {
+    let token = SUPA_ANON_KEY;
+    try {
+      const {
+        data: sd
+      } = await supa.auth.getSession();
+      if (sd && sd.session) token = sd.session.access_token;
+    } catch (e) {}
+    const res = await fetch(SUPA_URL + '/rest/v1/sessions?select=id&limit=1', {
+      headers: {
+        apikey: SUPA_ANON_KEY,
+        Authorization: 'Bearer ' + token
+      }
+    });
+    const text = await res.text();
+    return 'HTTP ' + res.status + ' — ' + (text ? text.slice(0, 180) : '(ไม่มีเนื้อหาตอบกลับ)');
+  } catch (e) {
+    return 'เชื่อมต่อ Supabase โดยตรงไม่ได้ (น่าจะ CORS/เครือข่าย): ' + (e && e.message ? e.message : String(e));
+  }
+}
 function errText(err) {
   if (!err) return 'ไม่ทราบสาเหตุ (error ว่างเปล่า)';
   if (typeof err === 'string') return err;
@@ -1403,7 +1424,6 @@ function Dashboard({
   favs,
   go,
   loadFav,
-  seedDemo,
   goal,
   setGoal,
   user,
@@ -1458,14 +1478,7 @@ function Dashboard({
   }, "กดปุ่มบันทึกด้านล่างเพื่อล็อก workout แรก แล้วหน้านี้จะโชว์ความครอบคลุมกล้ามเนื้อให้"), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-primary",
     onClick: () => go('log')
-  }, "บันทึก workout"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 14
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-sm",
-    onClick: seedDemo
-  }, "ลองใส่ข้อมูลตัวอย่าง"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "บันทึก workout")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       display: 'flex',
@@ -2329,9 +2342,10 @@ function App() {
         text: 'ซิงค์สำเร็จ'
       });
     } catch (e) {
+      const probe = await rawProbe();
       setSyncMsg({
         ok: false,
-        text: errText(e)
+        text: errText(e) + ' — [ตรวจสอบตรง] ' + probe
       });
     }
     setSyncing(false);
@@ -2457,39 +2471,11 @@ function App() {
     }).catch(e => console.error("sync error:", e));
     setTab('fav');
   }
-  function seedDemo() {
-    const now = Date.now();
-    const mk = (daysAgo, exs) => ({
-      id: 's_' + (now - daysAgo),
-      date: new Date(now - daysAgo * 86400000).toISOString(),
-      items: exs.map(([id, sets]) => ({
-        exerciseId: id,
-        sets
-      }))
-    });
-    const f = name => DEFAULT_FAVS.find(x => x.name === name).exerciseIds;
-    const pull = f('Pull day'),
-      push = f('Push day'),
-      leg = f('Leg day');
-    const setsW = (r, w) => [{
-      reps: r,
-      weight: w,
-      done: true
-    }, {
-      reps: r,
-      weight: w,
-      done: true
-    }];
-    const demo = [mk(5, [[push[0], setsW(10, 40)], [push[2], setsW(10, 12)], [push[4], setsW(12, 20)]]), mk(3, [[push[0], setsW(10, 42)], [push[1], setsW(10, 14)], [push[3], setsW(12, 16)]]), mk(1, [[leg[0], setsW(8, 60)], [push[0], setsW(10, 44)]])];
-    setSessions(demo);
-    setTab('home');
-  }
   return /*#__PURE__*/React.createElement(React.Fragment, null, tab === 'home' && /*#__PURE__*/React.createElement(Dashboard, {
     sessions: sessions,
     favs: favs,
     go: setTab,
     loadFav: loadFav,
-    seedDemo: seedDemo,
     goal: goal,
     setGoal: setGoal,
     user: user,
