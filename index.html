@@ -741,6 +741,9 @@ async function supaPullAll() {
   const [s, f, c] = await Promise.all([supa.from('sessions').select('*').order('date', {
     ascending: true
   }), supa.from('favorites').select('*'), supa.from('custom_exercises').select('*')]);
+  if (s.error) throw new Error('ดึงข้อมูล sessions ไม่ได้: ' + s.error.message);
+  if (f.error) throw new Error('ดึงข้อมูล favorites ไม่ได้: ' + f.error.message);
+  if (c.error) throw new Error('ดึงข้อมูล custom_exercises ไม่ได้: ' + c.error.message);
   return {
     sessions: (s.data || []).map(mapSessionIn),
     favs: (f.data || []).map(mapFavIn),
@@ -748,24 +751,33 @@ async function supaPullAll() {
   };
 }
 async function supaPushAll(uid, sessions, favs, custom) {
-  if (sessions.length) await supa.from('sessions').insert(sessions.map(s => ({
-    user_id: uid,
-    date: s.date,
-    items: s.items
-  })));
-  if (favs.length) await supa.from('favorites').upsert(favs.map(f => ({
-    id: f.id,
-    user_id: uid,
-    name: f.name,
-    exercise_ids: f.exerciseIds
-  })));
-  if (custom.length) await supa.from('custom_exercises').upsert(custom.map(e => ({
-    id: e.id,
-    user_id: uid,
-    name: e.name,
-    primary_muscle: e.primary,
-    secondary_muscles: e.secondary || []
-  })));
+  if (sessions.length) {
+    const r = await supa.from('sessions').insert(sessions.map(s => ({
+      user_id: uid,
+      date: s.date,
+      items: s.items
+    })));
+    if (r.error) throw new Error('อัปโหลด sessions ไม่ได้: ' + r.error.message);
+  }
+  if (favs.length) {
+    const r = await supa.from('favorites').upsert(favs.map(f => ({
+      id: f.id,
+      user_id: uid,
+      name: f.name,
+      exercise_ids: f.exerciseIds
+    })));
+    if (r.error) throw new Error('อัปโหลด favorites ไม่ได้: ' + r.error.message);
+  }
+  if (custom.length) {
+    const r = await supa.from('custom_exercises').upsert(custom.map(e => ({
+      id: e.id,
+      user_id: uid,
+      name: e.name,
+      primary_muscle: e.primary,
+      secondary_muscles: e.secondary || []
+    })));
+    if (r.error) throw new Error('อัปโหลด custom exercises ไม่ได้: ' + r.error.message);
+  }
 }
 const EQTH = {
   barbell: 'บาร์เบล',
@@ -1256,9 +1268,11 @@ function Picker({
 function AccountSheet({
   user,
   syncing,
+  syncMsg,
   onClose,
   onSignIn,
-  onSignOut
+  onSignOut,
+  onSyncNow
 }) {
   return /*#__PURE__*/React.createElement("div", {
     className: "overlay",
@@ -1345,7 +1359,24 @@ function AccountSheet({
   }, /*#__PURE__*/React.createElement(Ic, {
     n: "cloud",
     s: 13
-  }), syncing ? 'กำลังซิงค์...' : 'ซิงค์แล้ว'))), /*#__PURE__*/React.createElement("button", {
+  }), syncing ? 'กำลังซิงค์...' : 'พร้อมซิงค์'))), syncMsg && /*#__PURE__*/React.createElement("div", {
+    className: 'banner ' + (syncMsg.ok ? 'ok' : 'miss'),
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "small",
+    style: {
+      color: syncMsg.ok ? 'var(--ok-ink)' : 'var(--miss-ink)'
+    }
+  }, syncMsg.ok ? '✓ ' + syncMsg.text : '⚠ ' + syncMsg.text)), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-block",
+    style: {
+      marginBottom: 8
+    },
+    disabled: syncing,
+    onClick: onSyncNow
+  }, syncing ? 'กำลังซิงค์...' : 'ซิงค์ตอนนี้'), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-block",
     onClick: onSignOut
   }, "ออกจากระบบ"))));
@@ -1931,12 +1962,16 @@ function Favorites({
       user_id: user.id,
       name: f.name,
       exercise_ids: f.exerciseIds
-    }).then(() => {}).catch(() => {});
+    }).then(r => {
+      if (r && r.error) console.error("sync error:", r.error.message);
+    }).catch(e => console.error("sync error:", e));
     setEditing(null);
   }
   function del(id) {
     setFavs(favs.filter(f => f.id !== id));
-    if (user && supa) supa.from('favorites').delete().eq('id', id).then(() => {}).catch(() => {});
+    if (user && supa) supa.from('favorites').delete().eq('id', id).then(r => {
+      if (r && r.error) console.error("sync error:", r.error.message);
+    }).catch(e => console.error("sync error:", e));
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "app"
@@ -2237,6 +2272,7 @@ function App() {
   const [goal, setGoal] = useState(() => DB.get('genos.goal', 4));
   const [user, setUser] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null); // {ok:boolean, text}
   const [showAccount, setShowAccount] = useState(false);
   const syncedRef = useRef(false);
   useEffect(() => {
@@ -2253,29 +2289,40 @@ function App() {
       } catch (e) {}
     };
   }, []);
-  useEffect(() => {
-    if (!user || !supa || syncedRef.current) return;
-    syncedRef.current = true;
+  async function doSync() {
+    if (!user || !supa) return;
     setSyncing(true);
-    (async () => {
-      try {
-        const {
-          count
-        } = await supa.from('sessions').select('id', {
-          count: 'exact',
-          head: true
-        });
-        if (!count) {
-          await supaPushAll(user.id, sessions, favs, custom);
-        } else {
-          const remote = await supaPullAll();
-          setSessions(remote.sessions);
-          if (remote.favs.length) setFavs(remote.favs);
-          setCustom(remote.custom);
-        }
-      } catch (e) {}
-      setSyncing(false);
-    })();
+    setSyncMsg(null);
+    try {
+      const res = await supa.from('sessions').select('id', {
+        count: 'exact',
+        head: true
+      });
+      if (res.error) throw new Error('เช็คข้อมูลไม่ได้: ' + res.error.message);
+      if (!res.count) {
+        await supaPushAll(user.id, sessions, favs, custom);
+      } else {
+        const remote = await supaPullAll();
+        setSessions(remote.sessions);
+        if (remote.favs.length) setFavs(remote.favs);
+        setCustom(remote.custom);
+      }
+      setSyncMsg({
+        ok: true,
+        text: 'ซิงค์สำเร็จ'
+      });
+    } catch (e) {
+      setSyncMsg({
+        ok: false,
+        text: e && e.message || 'ซิงค์ไม่สำเร็จ'
+      });
+    }
+    setSyncing(false);
+  }
+  useEffect(() => {
+    if (!user || syncedRef.current) return;
+    syncedRef.current = true;
+    doSync();
   }, [user]);
   function signIn() {
     if (supa) supa.auth.signInWithOAuth({
@@ -2288,6 +2335,7 @@ function App() {
   function signOut() {
     if (supa) supa.auth.signOut();
     syncedRef.current = false;
+    setSyncMsg(null);
   }
   useEffect(() => {
     DB.set('genos.goal', goal);
@@ -2317,11 +2365,15 @@ function App() {
       name: ex.name,
       primary_muscle: ex.primary,
       secondary_muscles: ex.secondary || []
-    }).then(() => {}).catch(() => {});
+    }).then(r => {
+      if (r && r.error) console.error("sync error:", r.error.message);
+    }).catch(e => console.error("sync error:", e));
   }
   function deleteCustom(id) {
     setCustom(custom.filter(e => e.id !== id));
-    if (user && supa) supa.from('custom_exercises').delete().eq('id', id).then(() => {}).catch(() => {});
+    if (user && supa) supa.from('custom_exercises').delete().eq('id', id).then(r => {
+      if (r && r.error) console.error("sync error:", r.error.message);
+    }).catch(e => console.error("sync error:", e));
   }
   const cov = useMemo(() => coverage(sessions), [sessions]);
   function saveSession() {
@@ -2343,7 +2395,9 @@ function App() {
       user_id: user.id,
       date: newSession.date,
       items: newSession.items
-    }).then(() => {}).catch(() => {});
+    }).then(r => {
+      if (r && r.error) console.error("sync error:", r.error.message);
+    }).catch(e => console.error("sync error:", e));
     setDraft(TODAY_DRAFT());
     setTab('home');
   }
@@ -2381,7 +2435,9 @@ function App() {
       user_id: user.id,
       name: nf.name,
       exercise_ids: nf.exerciseIds
-    }).then(() => {}).catch(() => {});
+    }).then(r => {
+      if (r && r.error) console.error("sync error:", r.error.message);
+    }).catch(e => console.error("sync error:", e));
     setTab('fav');
   }
   function seedDemo() {
@@ -2445,9 +2501,11 @@ function App() {
   }), showAccount && /*#__PURE__*/React.createElement(AccountSheet, {
     user: user,
     syncing: syncing,
+    syncMsg: syncMsg,
     onClose: () => setShowAccount(false),
     onSignIn: signIn,
-    onSignOut: signOut
+    onSignOut: signOut,
+    onSyncNow: doSync
   }), /*#__PURE__*/React.createElement("div", {
     className: "nav"
   }, /*#__PURE__*/React.createElement("button", {
