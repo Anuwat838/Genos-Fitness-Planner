@@ -703,6 +703,9 @@ try {
   });
 } catch (e) {}
 
+// ---------- build version (สำหรับเช็คว่าเครื่องกำลังใช้ไฟล์ล่าสุดจริงไหม) ----------
+const BUILD_ID = '2026-07-01 09:27';
+
 // ---------- cloud sync (Supabase) ----------
 const SUPA_URL = 'https://wmypsryildrbllnyexxu.supabase.co';
 const SUPA_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndteXBzcnlpbGRyYmxsbnlleHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjYxMTMsImV4cCI6MjA5ODQ0MjExM30.kT6cn0ffYSxKctEoSwubBfdq3q27QsdM0Hdd8OUVbys';
@@ -1417,7 +1420,13 @@ function AccountSheet({
   }, syncing ? 'กำลังซิงค์...' : 'ซิงค์ตอนนี้'), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-block",
     onClick: onSignOut
-  }, "ออกจากระบบ"))));
+  }, "ออกจากระบบ")), /*#__PURE__*/React.createElement("p", {
+    className: "small muted",
+    style: {
+      textAlign: 'center',
+      marginTop: 16
+    }
+  }, "เวอร์ชัน ", BUILD_ID)));
 }
 function Dashboard({
   sessions,
