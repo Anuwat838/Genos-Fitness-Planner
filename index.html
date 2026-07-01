@@ -704,7 +704,7 @@ try {
 } catch (e) {}
 
 // ---------- build version (สำหรับเช็คว่าเครื่องกำลังใช้ไฟล์ล่าสุดจริงไหม) ----------
-const BUILD_ID = '2026-07-01 11:43';
+const BUILD_ID = '2026-07-01 14:07';
 
 // ---------- cloud sync (Supabase) ----------
 const SUPA_URL = 'https://wmypsryildrbllnyexxu.supabase.co';
@@ -741,34 +741,39 @@ function mapCustomIn(row) {
   };
 }
 async function rawProbe() {
+  let token = SUPA_ANON_KEY,
+    authMode = 'ANON(ไม่มี session!)';
   try {
-    let token = SUPA_ANON_KEY;
-    try {
-      const {
-        data: sd
-      } = await supa.auth.getSession();
-      if (sd && sd.session) token = sd.session.access_token;
-    } catch (e) {}
-    const tables = ['sessions', 'favorites', 'custom_exercises'];
-    const results = [];
-    for (const t of tables) {
-      try {
-        const res = await fetch(SUPA_URL + '/rest/v1/' + t + '?select=id&limit=3', {
-          headers: {
-            apikey: SUPA_ANON_KEY,
-            Authorization: 'Bearer ' + token
-          }
-        });
-        const text = await res.text();
-        results.push(t + ': HTTP ' + res.status + ' ' + (text ? text.slice(0, 150) : '(ว่าง)'));
-      } catch (e) {
-        results.push(t + ': เชื่อมต่อไม่ได้ - ' + (e && e.message ? e.message : String(e)));
-      }
+    const {
+      data: sd
+    } = await supa.auth.getSession();
+    if (sd && sd.session) {
+      token = sd.session.access_token;
+      authMode = 'user';
     }
-    return results.join('  |  ');
-  } catch (e) {
-    return 'ตรวจสอบไม่ได้: ' + (e && e.message ? e.message : String(e));
+  } catch (e) {}
+  const out = ['auth=' + authMode];
+  for (const t of ['sessions', 'favorites', 'custom_exercises']) {
+    try {
+      const res = await fetch(SUPA_URL + '/rest/v1/' + t + '?select=id', {
+        headers: {
+          apikey: SUPA_ANON_KEY,
+          Authorization: 'Bearer ' + token
+        }
+      });
+      let n = '?';
+      try {
+        const j = await res.json();
+        n = Array.isArray(j) ? j.length : 'ไม่ใช่array';
+      } catch (e) {
+        n = 'parseErr';
+      }
+      out.push(t.replace('custom_exercises', 'custom') + ':' + res.status + '/n=' + n);
+    } catch (e) {
+      out.push(t + ':ยิงไม่ได้');
+    }
   }
+  return out.join('  ');
 }
 function errText(err) {
   if (!err) return 'ไม่ทราบสาเหตุ (error ว่างเปล่า)';
@@ -2375,7 +2380,7 @@ function App() {
       const probe = await rawProbe();
       setSyncMsg({
         ok: true,
-        text: 'ซิงค์เสร็จ — จากคลาวด์ได้: workout ' + remote.sessions.length + ', fav ' + remote.favs.length + ', ท่า ' + remote.custom.length + ' | รวมแล้วมีท่าที่สร้างเอง ' + mCustom.length + ' (' + cnames + ') — [raw] ' + probe
+        text: '[ตรวจตรง] ' + probe + ' — รวมในเครื่อง: ท่า ' + mCustom.length + ' (' + cnames + ')'
       });
     } catch (e) {
       const probe = await rawProbe();
