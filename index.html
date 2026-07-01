@@ -737,13 +737,30 @@ function mapCustomIn(row) {
     loc: ''
   };
 }
+function errText(err) {
+  if (!err) return 'ไม่ทราบสาเหตุ (error ว่างเปล่า)';
+  if (typeof err === 'string') return err;
+  const parts = [];
+  if (err.message) parts.push(err.message);
+  if (err.code) parts.push('code:' + err.code);
+  if (err.details) parts.push('details:' + err.details);
+  if (err.hint) parts.push('hint:' + err.hint);
+  if (err.status) parts.push('status:' + err.status);
+  if (parts.length) return parts.join(' | ');
+  try {
+    const j = JSON.stringify(err);
+    return j === '{}' ? 'error object ว่างเปล่า (ตรวจ CORS/network)' : j;
+  } catch (e) {
+    return String(err);
+  }
+}
 async function supaPullAll() {
   const [s, f, c] = await Promise.all([supa.from('sessions').select('*').order('date', {
     ascending: true
   }), supa.from('favorites').select('*'), supa.from('custom_exercises').select('*')]);
-  if (s.error) throw new Error('ดึงข้อมูล sessions ไม่ได้: ' + s.error.message);
-  if (f.error) throw new Error('ดึงข้อมูล favorites ไม่ได้: ' + f.error.message);
-  if (c.error) throw new Error('ดึงข้อมูล custom_exercises ไม่ได้: ' + c.error.message);
+  if (s.error) throw new Error('ดึงข้อมูล sessions ไม่ได้: ' + errText(s.error));
+  if (f.error) throw new Error('ดึงข้อมูล favorites ไม่ได้: ' + errText(f.error));
+  if (c.error) throw new Error('ดึงข้อมูล custom_exercises ไม่ได้: ' + errText(c.error));
   return {
     sessions: (s.data || []).map(mapSessionIn),
     favs: (f.data || []).map(mapFavIn),
@@ -757,7 +774,7 @@ async function supaPushAll(uid, sessions, favs, custom) {
       date: s.date,
       items: s.items
     })));
-    if (r.error) throw new Error('อัปโหลด sessions ไม่ได้: ' + r.error.message);
+    if (r.error) throw new Error('อัปโหลด sessions ไม่ได้: ' + errText(r.error));
   }
   if (favs.length) {
     const r = await supa.from('favorites').upsert(favs.map(f => ({
@@ -766,7 +783,7 @@ async function supaPushAll(uid, sessions, favs, custom) {
       name: f.name,
       exercise_ids: f.exerciseIds
     })));
-    if (r.error) throw new Error('อัปโหลด favorites ไม่ได้: ' + r.error.message);
+    if (r.error) throw new Error('อัปโหลด favorites ไม่ได้: ' + errText(r.error));
   }
   if (custom.length) {
     const r = await supa.from('custom_exercises').upsert(custom.map(e => ({
@@ -776,7 +793,7 @@ async function supaPushAll(uid, sessions, favs, custom) {
       primary_muscle: e.primary,
       secondary_muscles: e.secondary || []
     })));
-    if (r.error) throw new Error('อัปโหลด custom exercises ไม่ได้: ' + r.error.message);
+    if (r.error) throw new Error('อัปโหลด custom exercises ไม่ได้: ' + errText(r.error));
   }
 }
 const EQTH = {
@@ -2298,7 +2315,7 @@ function App() {
         count: 'exact',
         head: true
       });
-      if (res.error) throw new Error('เช็คข้อมูลไม่ได้: ' + res.error.message);
+      if (res.error) throw new Error('เช็คข้อมูลไม่ได้: ' + errText(res.error));
       if (!res.count) {
         await supaPushAll(user.id, sessions, favs, custom);
       } else {
@@ -2314,7 +2331,7 @@ function App() {
     } catch (e) {
       setSyncMsg({
         ok: false,
-        text: e && e.message || 'ซิงค์ไม่สำเร็จ'
+        text: errText(e)
       });
     }
     setSyncing(false);
