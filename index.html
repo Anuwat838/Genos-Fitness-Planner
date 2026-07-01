@@ -704,7 +704,7 @@ try {
 } catch (e) {}
 
 // ---------- build version (สำหรับเช็คว่าเครื่องกำลังใช้ไฟล์ล่าสุดจริงไหม) ----------
-const BUILD_ID = '2026-07-01 09:27';
+const BUILD_ID = '2026-07-01 09:43';
 
 // ---------- cloud sync (Supabase) ----------
 const SUPA_URL = 'https://wmypsryildrbllnyexxu.supabase.co';
@@ -2350,9 +2350,10 @@ function App() {
       setSessions(remote.sessions);
       setFavs(remote.favs.length ? remote.favs : favs);
       setCustom(remote.custom);
+      const cnames = remote.custom.map(c => c.name).join(', ') || '(ไม่มี)';
       setSyncMsg({
         ok: true,
-        text: 'ซิงค์สำเร็จ'
+        text: 'ซิงค์สำเร็จ — workout ' + remote.sessions.length + ', favorite ' + remote.favs.length + ', ท่าที่สร้างเอง ' + remote.custom.length + ' (' + cnames + ')'
       });
     } catch (e) {
       const probe = await rawProbe();
