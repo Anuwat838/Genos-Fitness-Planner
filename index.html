@@ -2324,19 +2324,23 @@ function App() {
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const res = await supa.from('sessions').select('id', {
-        count: 'exact',
-        head: true
-      });
-      if (res.error) throw new Error('เช็คข้อมูลไม่ได้: ' + errText(res.error));
-      if (!res.count) {
-        await supaPushAll(user.id, sessions, favs, custom);
-      } else {
-        const remote = await supaPullAll();
-        setSessions(remote.sessions);
-        if (remote.favs.length) setFavs(remote.favs);
-        setCustom(remote.custom);
+      const [rs, rf, rc] = await Promise.all([supa.from('sessions').select('id,date'), supa.from('favorites').select('id'), supa.from('custom_exercises').select('id')]);
+      if (rs.error) throw new Error('เช็ค sessions ไม่ได้: ' + errText(rs.error));
+      if (rf.error) throw new Error('เช็ค favorites ไม่ได้: ' + errText(rf.error));
+      if (rc.error) throw new Error('เช็ค custom exercises ไม่ได้: ' + errText(rc.error));
+      const remoteDates = new Set((rs.data || []).map(r => r.date));
+      const remoteFavIds = new Set((rf.data || []).map(r => r.id));
+      const remoteCustomIds = new Set((rc.data || []).map(r => r.id));
+      const pendingSessions = sessions.filter(s => !remoteDates.has(s.date));
+      const pendingFavs = favs.filter(f => !remoteFavIds.has(f.id));
+      const pendingCustom = custom.filter(e => !remoteCustomIds.has(e.id));
+      if (pendingSessions.length || pendingFavs.length || pendingCustom.length) {
+        await supaPushAll(user.id, pendingSessions, pendingFavs, pendingCustom);
       }
+      const remote = await supaPullAll();
+      setSessions(remote.sessions);
+      setFavs(remote.favs.length ? remote.favs : favs);
+      setCustom(remote.custom);
       setSyncMsg({
         ok: true,
         text: 'ซิงค์สำเร็จ'
